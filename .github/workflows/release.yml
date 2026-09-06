@@ -29,7 +29,8 @@ jobs:
         run: |
           $version = $env:INPUT_VERSION.Trim()
           $version = $version -replace '^[vV]', ''
-          $version = $version -replace '[\s_]+', '-'
+          $version = $version -replace '[\s_~]+', '-'
+          $version = $version -replace '-+', '-'
           if ($version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
             throw "Version '$version' must look like 2.0.1 or 2.0.1-beta.1"
           }
