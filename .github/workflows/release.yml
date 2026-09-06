@@ -1,0 +1,71 @@
+name: Build and release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing version tag to release, for example v1.3.3"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Set version
+        id: version
+        shell: pwsh
+        env:
+          PUSHED_TAG: ${{ github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          $tag = if ($env:GITHUB_EVENT_NAME -eq "workflow_dispatch") { $env:INPUT_TAG } else { $env:PUSHED_TAG }
+          if ($tag -notmatch '^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
+            throw "Tag '$tag' must look like v1.2.3 or v1.2.3-beta.1"
+          }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$($tag.Substring(1))" >> $env:GITHUB_OUTPUT
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore source/WledSRServer/WledSRServer.csproj
+
+      - name: Publish application
+        run: >-
+          dotnet publish source/WledSRServer/WledSRServer.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained false
+          --output publish
+          -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Create release archive
+        shell: pwsh
+        run: |
+          $archive = "WledSRServer.zip"
+          Compress-Archive -Path publish\* -DestinationPath $archive
+          "archive=$archive" >> $env:GITHUB_ENV
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: WLED SR Audio Server ${{ steps.version.outputs.tag }}
+          generate_release_notes: true
+          files: ${{ env.archive }}
