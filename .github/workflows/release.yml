@@ -1,13 +1,10 @@
 name: Build and release
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
-      tag:
-        description: "Existing version tag to release, for example v1.3.3"
+      version:
+        description: "New version to release, for example 2.0.1"
         required: true
         type: string
 
@@ -22,21 +19,23 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ github.sha }}
 
       - name: Set version
         id: version
         shell: pwsh
         env:
-          PUSHED_TAG: ${{ github.ref_name }}
-          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          $tag = if ($env:GITHUB_EVENT_NAME -eq "workflow_dispatch") { $env:INPUT_TAG } else { $env:PUSHED_TAG }
-          if ($tag -notmatch '^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
-            throw "Tag '$tag' must look like v1.2.3 or v1.2.3-beta.1"
+          $version = $env:INPUT_VERSION.Trim()
+          $version = $version -replace '^[vV]', ''
+          if ($version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
+            throw "Version '$version' must look like 2.0.1 or 2.0.1-beta.1"
           }
+          $tag = "V$version"
           "tag=$tag" >> $env:GITHUB_OUTPUT
-          "version=$($tag.Substring(1))" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "Tag to create: $tag"
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v5
@@ -61,6 +60,19 @@ jobs:
           $archive = "WledSRServer.zip"
           Compress-Archive -Path publish\* -DestinationPath $archive
           "archive=$archive" >> $env:GITHUB_ENV
+
+      - name: Create version tag
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if (git ls-remote --exit-code --tags origin "refs/tags/$env:RELEASE_TAG" 2>$null) {
+            throw "Tag '$env:RELEASE_TAG' already exists"
+          }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a $env:RELEASE_TAG -m "Release $env:RELEASE_TAG"
+          git push origin $env:RELEASE_TAG
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
