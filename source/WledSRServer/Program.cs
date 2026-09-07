@@ -8,6 +8,7 @@ internal class Program
 {
     public static GuiContext? GuiContext { get; private set; } = new GuiContext();
     public static ServerContext ServerContext { get; } = new ServerContext();
+    public static LuaRuntimeManager LuaRuntime { get; } = new LuaRuntimeManager();
 
     protected static bool IsInDesigner => Assembly.GetEntryAssembly() == null;
 
@@ -54,6 +55,7 @@ internal class Program
 
                 AudioCaptureManager.Run();
                 NetworkManager.Run();
+                LuaRuntime.StartDefaultTheme();
             }
 
             Application.EnableVisualStyles();
@@ -65,6 +67,7 @@ internal class Program
 
             if (!IsInDesigner)
             {
+                LuaRuntime.Stop();
                 AudioCaptureManager.Stop();
                 NetworkManager.Stop();
             }
